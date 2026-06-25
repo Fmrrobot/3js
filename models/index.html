@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Editor 3D Mobile</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        
+        /* ─── BOTÃO FLUTUANTE PARA ABRIR MENU ─── */
+        #fab {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #44aaff, #2266cc);
+            border: none;
+            color: #fff;
+            font-size: 28px;
+            box-shadow: 0 4px 20px rgba(68,170,255,0.4);
+            cursor: pointer;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            touch-action: none;
+        }
+        #fab:active {
+            transform: scale(0.85);
+        }
+        #fab.closed {
+            transform: rotate(90deg);
+            background: linear-gradient(135deg, #ff4444, #cc2222);
+            box-shadow: 0 4px 20px rgba(255,68,68,0.4);
+        }
+        
+        /* ─── PAINEL FLUTUANTE (ARRASTÁVEL) ─── */
+        #panel {
+            position: fixed;
+            bottom: 110px;
+            right: 20px;
+            width: min(380px, 92vw);
+            max-height: 70vh;
+            background: rgba(10,10,15,0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 16px 18px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+            z-index: 100;
+            overflow-y: auto;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            touch-action: none;
+            transform: translateY(0) scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #panel.hidden {
+            transform: translateY(40px) scale(0.9);
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* Barra de arraste */
+        #panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            cursor: grab;
+            touch-action: none;
+            -webkit-touch-callout: none;
+        }
+        #panel-header:active {
+            cursor: grabbing;
+        }
+        #panel-title {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #44aaff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #panel-close {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 22px;
+            cursor: pointer;
+            padding: 0 6px;
+            transition: color 0.2s;
+            touch-action: none;
+        }
+        #panel-close:active {
+            color: #fff;
+        }
+        
+        /* Scroll */
+        #panel::-webkit-scrollbar { width: 3px; }
+        #panel::-webkit-scrollbar-thumb { background: #44aaff44; border-radius: 4px; }
+        
+        /* ─── CONTEÚDO ─── */
+        .ctrl-section {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .ctrl-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .ctrl-label {
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .ctrl-value {
+            color: #44aaff;
+            font-weight: 700;
+            font-size: 10px;
+            font-family: monospace;
+        }
+        
+        .slider-group {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 2px;
+        }
+        .slider-group label {
+            font-size: 9px;
+            color: #555;
+            min-width: 14px;
+            font-weight: 700;
+        }
+        .slider-group input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 3px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            outline: none;
+            touch-action: none;
+        }
+        .slider-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #44aaff;
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(68,170,255,0.3);
+            touch-action: none;
+        }
+        .slider-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #44aaff;
+            cursor: pointer;
+            border: none;
+        }
+        .slider-group .val {
+            font-size: 9px;
+            color: #44aaff;
+            min-width: 30px;
+            text-align: right;
+            font-family: monospace;
+        }
+        
+        /* Botões */
+        .btn-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .btn {
+            padding: 7px 12px;
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.04);
+            color: #aaa;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex: 1;
+            min-width: 50px;
+            text-align: center;
+            touch-action: manipulation;
+        }
+        .btn:active {
+            transform: scale(0.94);
+            background: rgba(255,255,255,0.1);
+        }
+        .btn-primary {
+            border-color: #44aaff66;
+            color: #44aaff;
+        }
+        .btn-primary:active {
+            background: rgba(68,170,255,0.2);
+        }
+        .btn-success {
+            border-color: #44ff8866;
+            color: #44ff88;
+        }
+        .btn-success:active {
+            background: rgba(68,255,136,0.2);
+        }
+        .btn-danger {
+            border-color: #ff444466;
+            color: #ff4444;
+        }
+        .btn-danger:active {
+            background: rgba(255,68,68,0.2);
+        }
+        .btn-warning {
+            border-color: #ffaa4466;
+            color: #ffaa44;
+        }
+        .btn-warning:active {
+            background: rgba(255,170,68,0.2);
+        }
+        
+        /* Upload */
+        .file-upload-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            flex: 2;
+        }
+        .file-upload-wrapper input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        
+        #file-name {
+            font-size: 8px;
+            color: #444;
+            margin-top: 3px;
+            text-align: center;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        #object-info {
+            font-size: 8px;
+            color: #444;
+            font-family: monospace;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 6px;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+        
+        /* Status */
+        #status {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 11px;
+            color: #aaa;
+            letter-spacing: 1px;
+            z-index: 50;
+            border: 1px solid rgba(255,255,255,0.06);
+            text-align: center;
+            max-width: 88vw;
+            pointer-events: none;
+            transition: opacity 0.4s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #status.success { color: #44ff88; border-color: #44ff8844; }
+        #status.error { color: #ff4444; border-color: #ff444444; }
+        
+        /* ─── RESPONSIVO ─── */
+        @media (max-width: 480px) {
+            #panel {
+                width: 94vw;
+                right: 3vw;
+                bottom: 100px;
+                padding: 14px 14px;
+                max-height: 65vh;
+            }
+            #fab {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+                bottom: 20px;
+                right: 20px;
+            }
+            .btn {
+                font-size: 8px;
+                padding: 6px 10px;
+                min-width: 44px;
+            }
+            .slider-group input[type="range"]::-webkit-slider-thumb {
+                width: 20px;
+                height: 20px;
+            }
+            #status {
+                font-size: 10px;
+                padding: 6px 14px;
+                top: 12px;
+            }
+        }
+        @media (orientation: landscape) and (max-height: 500px) {
+            #panel {
+                max-height: 80vh;
+                bottom: 80px;
+                padding: 10px 12px;
+            }
+            .ctrl-section {
+                margin-bottom: 4px;
+                padding-bottom: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Status -->
+    <div id="status">📁 Carregue um modelo 3D</div>
+
+    <!-- Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Botão Flutuante (FAB) -->
+    <button id="fab" onclick="togglePanel()">⚙</button>
+
+    <!-- Painel Arrastável -->
+    <div id="panel">
+        <!-- Cabeçalho (arrastável) -->
+        <div id="panel-header">
+            <div id="panel-title">🎮 EDITOR 3D</div>
+            <button id="panel-close" onclick="togglePanel()">✕</button>
+        </div>
+
+        <!-- Conteúdo -->
+        <div id="panel-content">
+            <!-- Upload -->
+            <div class="ctrl-section">
+                <div class="ctrl-label">📂 CARREGAR</div>
+                <div class="btn-row">
+                    <div class="file-upload-wrapper" style="flex:2;">
+                        <button class="btn btn-primary" style="width:100%;">📁 ESCOLHER</button>
+                        <input type="file" id="fileInput" accept=".glb,.gltf" onchange="loadModelFile(event)">
+                    </div>
+                    <button class="btn btn-warning" onclick="resetCamera()">🎯 CENTRO</button>
+                </div>
+                <div id="file-name">Nenhum arquivo</div>
+            </div>
+
+            <!-- Posição -->
+            <div class="ctrl-section">
+                <div class="ctrl-label">
+                    <span>📍 POSIÇÃO</span>
+                    <span class="ctrl-value" id="pos-display">0, 0, 0</span>
+                </div>
+                <div class="slider-group">
+                    <label>X</label>
+                    <input type="range" id="pos-x" min="-10" max="10" step="0.05" value="0" oninput="updateTransform()">
+                    <span class="val" id="pos-x-val">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Y</label>
+                    <input type="range" id="pos-y" min="-10" max="10" step="0.05" value="0" oninput="updateTransform()">
+                    <span class="val" id="pos-y-val">0.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Z</label>
+                    <input type="range" id="pos-z" min="-10" max="10" step="0.05" value="0" oninput="updateTransform()">
+                    <span class="val" id="pos-z-val">0.00</span>
+                </div>
+            </div>
+
+            <!-- Rotação -->
+            <div class="ctrl-section">
+                <div class="ctrl-label">
+                    <span>🔄 ROTAÇÃO</span>
+                    <span class="ctrl-value" id="rot-display">0°, 0°, 0°</span>
+                </div>
+                <div class="slider-group">
+                    <label>X</label>
+                    <input type="range" id="rot-x" min="-180" max="180" step="1" value="0" oninput="updateTransform()">
+                    <span class="val" id="rot-x-val">0°</span>
+                </div>
+                <div class="slider-group">
+                    <label>Y</label>
+                    <input type="range" id="rot-y" min="-180" max="180" step="1" value="0" oninput="updateTransform()">
+                    <span class="val" id="rot-y-val">0°</span>
+                </div>
+                <div class="slider-group">
+                    <label>Z</label>
+                    <input type="range" id="rot-z" min="-180" max="180" step="1" value="0" oninput="updateTransform()">
+                    <span class="val" id="rot-z-val">0°</span>
+                </div>
+            </div>
+
+            <!-- Escala -->
+            <div class="ctrl-section">
+                <div class="ctrl-label">
+                    <span>📐 ESCALA</span>
+                    <span class="ctrl-value" id="scale-display">1, 1, 1</span>
+                </div>
+                <div class="slider-group">
+                    <label>X</label>
+                    <input type="range" id="scale-x" min="0.01" max="5" step="0.05" value="1" oninput="updateTransform()">
+                    <span class="val" id="scale-x-val">1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Y</label>
+                    <input type="range" id="scale-y" min="0.01" max="5" step="0.05" value="1" oninput="updateTransform()">
+                    <span class="val" id="scale-y-val">1.00</span>
+                </div>
+                <div class="slider-group">
+                    <label>Z</label>
+                    <input type="range" id="scale-z" min="0.01" max="5" step="0.05" value="1" oninput="updateTransform()">
+                    <span class="val" id="scale-z-val">1.00</span>
+                </div>
+                <div class="btn-row" style="margin-top:4px;">
+                    <button class="btn btn-warning" onclick="resetScale()" style="flex:1;">↺ UNIFORME</button>
+                    <button class="btn btn-success" onclick="resetTransform()" style="flex:1;">⟲ RESET</button>
+                </div>
+            </div>
+
+            <!-- Ações -->
+            <div class="ctrl-section">
+                <div class="btn-row">
+                    <button class="btn btn-success" onclick="copyTransform()" style="flex:1;">📋 COPIAR</button>
+                    <button class="btn btn-warning" onclick="pasteTransform()" style="flex:1;">📥 COLAR</button>
+                    <button class="btn btn-danger" onclick="removeObject()" style="flex:1;">🗑 REMOVER</button>
+                </div>
+                <div id="object-info">
+                    <span id="obj-name">Nenhum objeto</span><br>
+                    <span id="obj-details">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+    // ─── CONFIGURAÇÕES ───
+    let scene, camera, renderer, controls;
+    let currentObject = null;
+    let objectGroup = new THREE.Group();
+    let clipboard = null;
+
+    // ─── INICIALIZAÇÃO ───
+    function init() {
+        const container = document.getElementById('canvas-container');
+        
+        // Scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        
+        // Camera
+        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(5, 4, 8);
+        camera.lookAt(0, 0, 0);
+        
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+        
+        // OrbitControls
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 0.5;
+        controls.maxDistance = 50;
+        controls.target.set(0, 0, 0);
+        controls.update();
+        
+        // ─── LUZES ───
+        const ambient = new THREE.AmbientLight(0x404060, 0.6);
+        scene.add(ambient);
+        
+        const sun = new THREE.DirectionalLight(0xffeedd, 1.5);
+        sun.position.set(10, 15, 8);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 1024;
+        sun.shadow.mapSize.height = 1024;
+        scene.add(sun);
+        
+        const fill = new THREE.DirectionalLight(0x4488ff, 0.5);
+        fill.position.set(-5, 3, -10);
+        scene.add(fill);
+        
+        const hemi = new THREE.HemisphereLight(0x87ceeb, 0x362d1e, 0.6);
+        scene.add(hemi);
+        
+        // ─── GRADE ───
+        const grid = new THREE.GridHelper(20, 20, 0x444466, 0x333355);
+        scene.add(grid);
+        
+        const floorMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.01;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // ─── EVENTOS ───
+        window.addEventListener('resize', onResize);
+        
+        // ─── DRAG DO PAINEL ───
+        setupPanelDrag();
+        
+        // ─── ANIMAÇÃO ───
+        animate();
+    }
+
+    // ─── ANIMAÇÃO ───
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    // ─── REDIMENSIONAR ───
+    function onResize() {
+        const container = document.getElementById('canvas-container');
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    }
+
+    // ─── PAINEL DRAG ───
+    function setupPanelDrag() {
+        const panel = document.getElementById('panel');
+        const header = document.getElementById('panel-header');
+        let isDragging = false;
+        let startX, startY, origX, origY;
+        let hasMoved = false;
+
+        const onStart = (e) => {
+            const touch = e.touches ? e.touches[0] : e;
+            isDragging = true;
+            hasMoved = false;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            const rect = panel.getBoundingClientRect();
+            origX = rect.left;
+            origY = rect.top;
+            panel.style.transition = 'none';
+            panel.style.position = 'fixed';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+            panel.style.left = rect.left + 'px';
+            panel.style.top = rect.top + 'px';
+            e.preventDefault();
+        };
+
+        const onMove = (e) => {
+            if (!isDragging) return;
+            const touch = e.touches ? e.touches[0] : e;
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved = true;
+            panel.style.left = (origX + dx) + 'px';
+            panel.style.top = (origY + dy) + 'px';
+            e.preventDefault();
+        };
+
+        const onEnd = () => {
+            isDragging = false;
+            panel.style.transition = 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            // Garante que o painel não saia da tela
+            const rect = panel.getBoundingClientRect();
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            let l = parseInt(panel.style.left) || 0;
+            let t = parseInt(panel.style.top) || 0;
+            l = Math.max(0, Math.min(vw - rect.width, l));
+            t = Math.max(0, Math.min(vh - rect.height - 20, t));
+            panel.style.left = l + 'px';
+            panel.style.top = t + 'px';
+        };
+
+        header.addEventListener('mousedown', onStart);
+        header.addEventListener('touchstart', onStart, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('touchend', onEnd);
+    }
+
+    // ─── ABRIR/FECHAR PAINEL ───
+    let panelOpen = true;
+    function togglePanel() {
+        panelOpen = !panelOpen;
+        document.getElementById('panel').classList.toggle('hidden', !panelOpen);
+        document.getElementById('fab').classList.toggle('closed', !panelOpen);
+        document.getElementById('fab').textContent = panelOpen ? '✕' : '⚙';
+    }
+
+    // ─── CARREGAR MODELO ───
+    function loadModelFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const arrayBuffer = e.target.result;
+                const loader = new THREE.GLTFLoader();
+                
+                setStatus('⏳ Carregando...', '');
+                
+                loader.parse(arrayBuffer, '', function(gltf) {
+                    removeObject();
+                    objectGroup = new THREE.Group();
+                    const model = gltf.scene;
+                    objectGroup.add(model);
+                    
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    
+                    const box = new THREE.Box3().setFromObject(model);
+                    const center = new THREE.Vector3();
+                    box.getCenter(center);
+                    model.position.sub(center);
+                    
+                    scene.add(objectGroup);
+                    currentObject = objectGroup;
+                    
+                    document.getElementById('file-name').textContent = file.name;
+                    document.getElementById('obj-name').textContent = `📦 ${file.name}`;
+                    document.getElementById('obj-details').textContent = `Vértices: ${countVertices(model)} | Meshes: ${countMeshes(model)}`;
+                    
+                    resetTransform();
+                    fitCameraToObject();
+                    
+                    setStatus(`✅ ${file.name} carregado!`, 'success');
+                }, function(error) {
+                    console.error('Erro:', error);
+                    setStatus('❌ Erro no arquivo', 'error');
+                });
+            } catch (error) {
+                console.error('Erro:', error);
+                setStatus('❌ Erro ao ler arquivo', 'error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // ─── CONTAGEM ───
+    function countVertices(obj) {
+        let count = 0;
+        obj.traverse((child) => {
+            if (child.isMesh && child.geometry) {
+                const pos = child.geometry.getAttribute('position');
+                if (pos) count += pos.count;
+            }
+        });
+        return count.toLocaleString();
+    }
+
+    function countMeshes(obj) {
+        let count = 0;
+        obj.traverse((child) => {
+            if (child.isMesh) count++;
+        });
+        return count;
+    }
+
+    // ─── AJUSTAR CÂMERA ───
+    function fitCameraToObject() {
+        if (!currentObject) return;
+        const box = new THREE.Box3().setFromObject(currentObject);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = maxDim * 2.5 + 2;
+        camera.position.set(distance * 0.8, distance * 0.6, distance);
+        controls.target.set(0, 0, 0);
+        controls.update();
+    }
+
+    // ─── ATUALIZAR TRANSFORMAÇÃO ───
+    function updateTransform() {
+        if (!currentObject) return;
+        
+        const posX = parseFloat(document.getElementById('pos-x').value);
+        const posY = parseFloat(document.getElementById('pos-y').value);
+        const posZ = parseFloat(document.getElementById('pos-z').value);
+        const rotX = parseFloat(document.getElementById('rot-x').value) * Math.PI / 180;
+        const rotY = parseFloat(document.getElementById('rot-y').value) * Math.PI / 180;
+        const rotZ = parseFloat(document.getElementById('rot-z').value) * Math.PI / 180;
+        const scaleX = parseFloat(document.getElementById('scale-x').value);
+        const scaleY = parseFloat(document.getElementById('scale-y').value);
+        const scaleZ = parseFloat(document.getElementById('scale-z').value);
+        
+        currentObject.position.set(posX, posY, posZ);
+        currentObject.rotation.set(rotX, rotY, rotZ);
+        currentObject.scale.set(scaleX, scaleY, scaleZ);
+        
+        document.getElementById('pos-display').textContent = `${posX.toFixed(2)}, ${posY.toFixed(2)}, ${posZ.toFixed(2)}`;
+        document.getElementById('rot-display').textContent = `${(rotX*180/Math.PI).toFixed(1)}°, ${(rotY*180/Math.PI).toFixed(1)}°, ${(rotZ*180/Math.PI).toFixed(1)}°`;
+        document.getElementById('scale-display').textContent = `${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}, ${scaleZ.toFixed(2)}`;
+        
+        document.getElementById('pos-x-val').textContent = posX.toFixed(2);
+        document.getElementById('pos-y-val').textContent = posY.toFixed(2);
+        document.getElementById('pos-z-val').textContent = posZ.toFixed(2);
+        document.getElementById('rot-x-val').textContent = (rotX*180/Math.PI).toFixed(1) + '°';
+        document.getElementById('rot-y-val').textContent = (rotY*180/Math.PI).toFixed(1) + '°';
+        document.getElementById('rot-z-val').textContent = (rotZ*180/Math.PI).toFixed(1) + '°';
+        document.getElementById('scale-x-val').textContent = scaleX.toFixed(2);
+        document.getElementById('scale-y-val').textContent = scaleY.toFixed(2);
+        document.getElementById('scale-z-val').textContent = scaleZ.toFixed(2);
+    }
+
+    // ─── RESET ───
+    function resetTransform() {
+        document.getElementById('pos-x').value = 0;
+        document.getElementById('pos-y').value = 0;
+        document.getElementById('pos-z').value = 0;
+        document.getElementById('rot-x').value = 0;
+        document.getElementById('rot-y').value = 0;
+        document.getElementById('rot-z').value = 0;
+        document.getElementById('scale-x').value = 1;
+        document.getElementById('scale-y').value = 1;
+        document.getElementById('scale-z').value = 1;
+        updateTransform();
+    }
+
+    function resetScale() {
+        const avg = (parseFloat(document.getElementById('scale-x').value) + 
+                     parseFloat(document.getElementById('scale-y').value) + 
+                     parseFloat(document.getElementById('scale-z').value)) / 3;
+        document.getElementById('scale-x').value = avg;
+        document.getElementById('scale-y').value = avg;
+        document.getElementById('scale-z').value = avg;
+        updateTransform();
+    }
+
+    // ─── COPIAR/COLAR ───
+    function copyTransform() {
+        if (!currentObject) {
+            setStatus('❌ Nenhum objeto!', 'error');
+            return;
+        }
+        clipboard = {
+            position: currentObject.position.clone(),
+            rotation: currentObject.rotation.clone(),
+            scale: currentObject.scale.clone()
+        };
+        setStatus('📋 Copiado!', 'success');
+        setTimeout(() => setStatus('📁 Pronto', ''), 1500);
+    }
+
+    function pasteTransform() {
+        if (!clipboard) { setStatus('❌ Nada para colar', 'error'); return; }
+        if (!currentObject) { setStatus('❌ Carregue um objeto', 'error'); return; }
+        currentObject.position.copy(clipboard.position);
+        currentObject.rotation.copy(clipboard.rotation);
+        currentObject.scale.copy(clipboard.scale);
+        
+        document.getElementById('pos-x').value = clipboard.position.x;
+        document.getElementById('pos-y').value = clipboard.position.y;
+        document.getElementById('pos-z').value = clipboard.position.z;
+        document.getElementById('rot-x').value = clipboard.rotation.x * 180 / Math.PI;
+        document.getElementById('rot-y').value = clipboard.rotation.y * 180 / Math.PI;
+        document.getElementById('rot-z').value = clipboard.rotation.z * 180 / Math.PI;
+        document.getElementById('scale-x').value = clipboard.scale.x;
+        document.getElementById('scale-y').value = clipboard.scale.y;
+        document.getElementById('scale-z').value = clipboard.scale.z;
+        
+        updateTransform();
+        setStatus('📥 Colado!', 'success');
+        setTimeout(() => setStatus('📁 Pronto', ''), 1500);
+    }
+
+    // ─── REMOVER ───
+    function removeObject() {
+        if (currentObject) {
+            scene.remove(currentObject);
+            currentObject = null;
+            objectGroup = new THREE.Group();
+            document.getElementById('file-name').textContent = 'Nenhum arquivo';
+            document.getElementById('obj-name').textContent = 'Nenhum objeto';
+            document.getElementById('obj-details').textContent = '-';
+            setStatus('🗑 Removido', '');
+        }
+    }
+
+    // ─── RESETAR CÂMERA ───
+    function resetCamera() {
+        camera.position.set(5, 4, 8);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        setStatus('🎯 Centralizado', '');
+        setTimeout(() => setStatus('📁 Pronto', ''), 1200);
+    }
+
+    // ─── STATUS ───
+    function setStatus(msg, type) {
+        const el = document.getElementById('status');
+        el.textContent = msg;
+        el.className = type || '';
+        clearTimeout(el._timeout);
+        if (type) {
+            el._timeout = setTimeout(() => {
+                if (el.textContent === msg) {
+                    el.className = '';
+                    el.textContent = '📁 Pronto';
+                }
+            }, 3000);
+        }
+    }
+
+    // ─── INICIAR ───
+    init();
+    </script>
+</body>
+</html>
